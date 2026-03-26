@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LeadFlow — Approve Batch</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:      #07090e;
+    --surface: #0b0e18;
+    --border:  #172033;
+    --border2: #1e3048;
+    --indigo:  #6366f1;
+    --blue:    #0ea5e9;
+    --green:   #22c55e;
+    --amber:   #f59e0b;
+    --red:     #ef4444;
+    --purple:  #a78bfa;
+    --text:    #d8e0f0;
+    --muted:   #4b6480;
+    --dim:     #2d4a62;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh; padding-bottom: 80px;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0;
+    pointer-events: none; z-index: 0; opacity: .35;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  }
+
+  /* Header */
+  .hdr {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 13px 28px; display: flex; align-items: center; gap: 10px;
+    position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px);
+  }
+  .logo {
+    font-size: 17px; font-weight: 900; letter-spacing: -1px;
+    background: linear-gradient(120deg, var(--indigo), var(--blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; flex-shrink: 0;
+  }
+  .hdr-badge {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+    padding: 2px 9px; border-radius: 20px;
+    background: #6366f122; border: 1px solid #6366f133; color: var(--indigo);
+  }
+  .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .hdr-info  { font-size: 11px; color: var(--dim); }
+  .pulse-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    background: var(--amber); animation: pulse 1.5s infinite;
+  }
+  .pulse-dot.ok   { background: var(--green); animation: none; }
+  .pulse-dot.skip { background: var(--dim);   animation: none; }
+  .pulse-dot.err  { background: var(--red);   animation: none; }
+
+  /* Layout */
+  .wrap { max-width: 980px; margin: 0 auto; padding: 26px 22px; position: relative; z-index: 1; }
+
+  /* State screens */
+  .sscreen { text-align: center; padding: 80px 24px; display: none; }
+  .sscreen.show { display: block; }
+  .spinner {
+    width: 34px; height: 34px; border: 3px solid var(--border2);
+    border-top-color: var(--indigo); border-radius: 50%;
+    animation: spin .75s linear infinite; margin: 0 auto 18px;
+  }
+  .sscreen p  { font-size: 12px; color: var(--muted); line-height: 1.8; max-width: 500px; margin: 0 auto; }
+  .sscreen h2 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+
+  /* Timeline */
+  .timeline { display: flex; margin-bottom: 20px; }
+  .tstep { flex: 1; text-align: center; padding: 10px 6px; border-top: 2px solid var(--border); font-size: 10px; }
+  .tstep.done   { border-top-color: var(--green); }
+  .tstep.active { border-top-color: var(--indigo); }
+  .t-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--border);
+    margin: 0 auto 6px; position: relative; top: -15px;
+  }
+  .tstep.done   .t-dot { background: var(--green); }
+  .tstep.active .t-dot { background: var(--indigo); box-shadow: 0 0 8px var(--indigo); }
+  .t-lbl { color: var(--dim); margin-top: -10px; line-height: 1.5; }
+  .tstep.done   .t-lbl { color: var(--green); }
+  .tstep.active .t-lbl { color: var(--indigo); font-weight: 700; }
+
+  /* Banner */
+  .banner {
+    background: linear-gradient(135deg, #0d0f1e, #111827);
+    border: 1px solid var(--indigo); border-radius: 12px;
+    padding: 18px 22px; margin-bottom: 18px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .banner-icon { font-size: 30px; flex-shrink: 0; }
+  .banner h1   { font-size: 15px; font-weight: 700; color: #e2eaf8; margin-bottom: 4px; }
+  .banner p    { font-size: 11px; color: var(--muted); line-height: 1.7; }
+  .bnum        { margin-left: auto; text-align: right; flex-shrink: 0; }
+  .bnum .n     { font-size: 30px; font-weight: 900; color: var(--indigo); line-height: 1; }
+  .bnum .l     { font-size: 10px; color: var(--dim); font-weight: 700; letter-spacing: 1px; }
+
+  /* Two columns */
+  .cols { display: grid; grid-template-columns: 1fr 350px; gap: 14px; }
+  @media(max-width: 740px){ .cols{ grid-template-columns: 1fr; } }
+
+  /* Card */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px; margin-bottom: 14px;
+  }
+  .card-title {
+    font-size: 12px; font-weight: 700; color: #e2eaf8;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 7px;
+  }
+  .card-title span { color: var(--dim); font-weight: 400; }
+
+  /* Tags */
+  .tags-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .mtag {
+    background: #6366f122; border: 1px solid #6366f144; color: #818cf8;
+    padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 700;
+    cursor: pointer; transition: all .15s; user-select: none;
+  }
+  .mtag:hover { background: #6366f133; transform: translateY(-1px); }
+  .mtag:active { transform: scale(.95); }
+  .tag-hint { font-size: 10px; color: var(--dim); margin-bottom: 10px; }
+
+  /* Warning */
+  .warn {
+    background: #1c1400; border: 1px solid #f59e0b55; border-radius: 7px;
+    padding: 9px 13px; font-size: 11px; color: var(--amber);
+    line-height: 1.7; margin-bottom: 10px; display: none;
+  }
+  .warn.show { display: block; }
+
+  /* Textarea */
+  .tarea {
+    width: 100%; background: #0f1420; border: 1px solid var(--border2);
+    border-radius: 8px; color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px; line-height: 1.85; padding: 13px 15px;
+    resize: vertical; min-height: 280px; outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .tarea:focus { border-color: var(--indigo); box-shadow: 0 0 0 3px #6366f113; }
+  .wc { font-size: 10px; color: var(--dim); margin-top: 5px; text-align: right; }
+
+  /* Preview */
+  .prev-btns { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 9px; }
+  .pbtn {
+    background: var(--border); border: 1px solid var(--border2); color: var(--muted);
+    padding: 3px 9px; border-radius: 4px; font-size: 11px; cursor: pointer;
+    transition: all .15s; font-family: inherit;
+  }
+  .pbtn.active { background: #0ea5e922; border-color: #0ea5e944; color: var(--blue); }
+  .prev-box {
+    background: #0f1420; border: 1px solid var(--border2); border-radius: 8px;
+    padding: 13px 15px; font-size: 12px; line-height: 1.9; color: #e2eaf8;
+    white-space: pre-wrap; min-height: 190px; max-height: 330px; overflow-y: auto;
+  }
+
+  /* Table */
+  .tbl-wrap { overflow-x: auto; max-height: 300px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th {
+    text-align: left; padding: 7px 9px; color: var(--dim);
+    font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface);
+  }
+  td { padding: 8px 9px; border-bottom: 1px solid #0f1420; vertical-align: middle; }
+  tr:hover td { background: #0f1520; }
+  .ln { font-weight: 700; color: #e2eaf8; }
+  .le { font-size: 10px; color: var(--blue); }
+
+  /* Approve */
+  .approve-btn {
+    width: 100%; background: linear-gradient(135deg,#16a34a,#15803d);
+    color: #fff; border: none; border-radius: 10px; padding: 15px 22px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 700;
+    cursor: pointer; letter-spacing: .4px; transition: all .2s;
+    position: relative; overflow: hidden; box-shadow: 0 4px 24px #22c55e1a;
+  }
+  .approve-btn::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(135deg,#22c55e,#16a34a);
+    opacity: 0; transition: opacity .2s;
+  }
+  .approve-btn:hover::before { opacity: 1; }
+  .approve-btn:hover  { transform: translateY(-1px); box-shadow: 0 8px 32px #22c55e2a; }
+  .approve-btn:active { transform: scale(.98); }
+  .approve-btn span   { position: relative; z-index: 1; }
+  .approve-btn.busy   { opacity: .65; cursor: not-allowed; pointer-events: none; }
+  .approve-sub { font-size: 10px; color: var(--dim); text-align: center; margin-top: 7px; line-height: 1.6; }
+  .skip-btn {
+    width: 100%; background: #111827; color: var(--muted);
+    border: 1px solid var(--border2); border-radius: 8px;
+    padding: 9px 16px; font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    transition: all .15s; margin-top: 7px;
+  }
+  .skip-btn:hover { border-color: var(--dim); color: var(--text); }
+
+  /* Info box */
+  .info {
+    background: #0c1a2e; border: 1px solid #1e3a5f; border-radius: 8px;
+    padding: 11px 13px; font-size: 11px; color: var(--muted); line-height: 1.85;
+  }
+
+  /* Success */
+  .success-body { text-align: center; padding: 60px 20px; }
+  .sicon { font-size: 60px; margin-bottom: 18px; }
+  .success-body h2 { font-size: 21px; font-weight: 900; color: var(--green); margin-bottom: 9px; }
+  .success-body p  { font-size: 12px; color: var(--muted); line-height: 1.8; max-width: 420px; margin: 0 auto; }
+  .s-stats {
+    display: inline-flex; gap: 22px; margin-top: 22px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 26px;
+  }
+  .s-stats div { text-align: center; }
+  .sv { font-size: 22px; font-weight: 900; }
+  .sl { font-size: 10px; color: var(--dim); font-weight: 700; letter-spacing: 1px; }
+
+  /* Setup guide */
+  .setup-step {
+    background: #0f1420; border: 1px solid var(--border2);
+    border-radius: 8px; padding: 13px 16px; margin-bottom: 10px; font-size: 12px;
+    line-height: 1.8; color: var(--muted);
+  }
+  .sn {
+    display: inline-block; background: var(--indigo); color: #fff;
+    width: 20px; height: 20px; border-radius: 50%; text-align: center;
+    line-height: 20px; font-size: 11px; font-weight: 700;
+    margin-right: 8px; vertical-align: middle;
+  }
+  .setup-step code {
+    background: #172033; padding: 2px 6px; border-radius: 3px;
+    color: #818cf8; font-size: 11px; word-break: break-all; font-family: inherit;
+  }
+  .copy-btn {
+    background: #172033; border: 1px solid var(--border2); color: var(--blue);
+    padding: 5px 11px; border-radius: 5px; font-size: 11px; font-weight: 700;
+    cursor: pointer; font-family: inherit; margin-top: 8px; transition: all .15s;
+    display: inline-block;
+  }
+  .copy-btn:hover { background: #1e3048; }
+
+  /* Animations */
+  @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:.3} }
+  @keyframes spin   { to{transform:rotate(360deg)} }
+  .fadein { animation: fadeUp .35s ease both; }
+
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="logo">◈ LeadFlow</div>
+  <span class="hdr-badge">BATCH APPROVAL</span>
+  <div class="hdr-right">
+    <span class="pulse-dot" id="pulseDot"></span>
+    <span class="hdr-info"  id="hdrInfo">Initialising…</span>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div class="wrap">
+  <div class="sscreen show" id="screenLoading">
+    <div class="spinner"></div>
+    <p>Fetching today's leads &amp; template from Google Sheets…</p>
+  </div>
+</div>
+
+<!-- ERROR -->
+<div class="wrap">
+  <div class="sscreen" id="screenError">
+    <h2 style="color:var(--red);">⚠️ Could not load batch</h2>
+    <p id="errMsg">Unknown error.</p>
+    <p style="margin-top:14px;font-size:11px;color:var(--dim);">
+      Check the setup guide below or re-send the approval link from Make.com.
+    </p>
+  </div>
+</div>
+
+<!-- SETUP GUIDE (shown when sheetId param is missing) -->
+<div class="wrap fadein" id="screenSetup" style="display:none;">
+  <div class="card" style="border-color:#6366f133;">
+    <div class="card-title">⚙️ One-Time Setup — Configure Make.com URL Params</div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:16px;">
+      This page reads leads and the template directly from Google Sheets.<br/>
+      Make.com needs to send the sheet details as URL params. Do this once.
+    </p>
+
+    <div class="setup-step">
+      <span class="sn">1</span>
+      <strong style="color:#e2eaf8;">Find your Google Sheet ID</strong><br/>
+      Open the sheet. Copy the bold section from the URL:<br/>
+      <code>https://docs.google.com/spreadsheets/d/<strong style="color:var(--green);">COPY_THIS_PART</strong>/edit</code>
+    </div>
+
+    <div class="setup-step">
+      <span class="sn">2</span>
+      <strong style="color:#e2eaf8;">Find GID numbers for Leads and Templates tabs</strong><br/>
+      Click the Leads tab → look at the URL:<br/>
+      <code>…#gid=<strong style="color:var(--green);">THIS_NUMBER</strong></code><br/>
+      Repeat for the Templates tab. Note both numbers.
+    </div>
+
+    <div class="setup-step">
+      <span class="sn">3</span>
+      <strong style="color:#e2eaf8;">Share the sheet publicly</strong><br/>
+      File → Share → Share with others → Change to
+      <strong style="color:#fff;">Anyone with the link → Viewer</strong><br/>
+      Required so the browser can fetch the CSV without a login wall.
+    </div>
+
+    <div class="setup-step" style="border-color:#22c55e33;background:#0d1e0d;">
+      <span class="sn" style="background:var(--green);">4</span>
+      <strong style="color:#e2eaf8;">Required: Leads tab column headers (exact)</strong><br/>
+      <code>Name</code> &nbsp;<code>Email</code> &nbsp;<code>Job Title</code>
+      &nbsp;<code>Company Name</code> &nbsp;<code>Batch Date</code> &nbsp;<code>Status</code><br/>
+      Make.com must write <code>Batch Date</code> as <strong style="color:#fff;">YYYY-MM-DD</strong> (ISO format).
+    </div>
+
+    <div class="setup-step" style="border-color:#0ea5e933;background:#061422;">
+      <span class="sn" style="background:var(--blue);">5</span>
+      <strong style="color:#e2eaf8;">Required: Templates tab column headers (exact)</strong><br/>
+      <code>Date</code> &nbsp;<code>Template Body</code> &nbsp;<code>Status</code><br/>
+      Make.com writes Claude's template here after Scenario 1 runs.<br/>
+      <code>Date</code> must match <strong style="color:#fff;">YYYY-MM-DD</strong> format.
+    </div>
+
+    <div class="setup-step">
+      <span class="sn">6</span>
+      <strong style="color:#e2eaf8;">Make.com sends this URL in the review email</strong><br/>
+      Use the HTTP module or Set Variable to build this URL, then include it in the email body:<br/>
+      <code id="sampleUrlCode">https://YOUR-USERNAME.github.io/approve.html?webhook=WEBHOOK_URL&amp;batch=YYYY-MM-DD&amp;from=amitg@futurismtech.com&amp;sheetId=SHEET_ID&amp;leadsGid=LEADS_GID&amp;templatesGid=TEMPLATES_GID&amp;senderName=Amit+G&amp;meetingLink=YOUR_CALENDLY_URL</code>
+      <br/>
+      <button class="copy-btn" onclick="copyUrl()">📋 Copy URL template</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="wrap fadein" id="screenMain" style="display:none;">
+
+  <div class="timeline">
+    <div class="tstep done">
+      <div class="t-dot"></div>
+      <div class="t-lbl">7:00 AM<br/>Leads Pulled</div>
+    </div>
+    <div class="tstep done">
+      <div class="t-dot"></div>
+      <div class="t-lbl">~8 AM<br/>Email Sent</div>
+    </div>
+    <div class="tstep active" id="tStep3">
+      <div class="t-dot"></div>
+      <div class="t-lbl">Now<br/>Your Approval</div>
+    </div>
+    <div class="tstep" id="tStep4">
+      <div class="t-dot"></div>
+      <div class="t-lbl">10:00 AM<br/>Emails Fire</div>
+    </div>
+  </div>
+
+  <div class="banner">
+    <div class="banner-icon">📦</div>
+    <div>
+      <h1 id="bannerTitle">Daily Batch — Loading…</h1>
+      <p>Review the AI-generated template. Edit if needed. Click Approve — each lead gets a personalised version at 10:00 AM.</p>
+    </div>
+    <div class="bnum">
+      <div class="n" id="bannerCount">—</div>
+      <div class="l">LEADS TODAY</div>
+    </div>
+  </div>
+
+  <div class="cols">
+
+    <!-- LEFT -->
+    <div>
+      <div class="card">
+        <div class="card-title">✉️ Email Template <span>— edit freely, then approve</span></div>
+
+        <div class="warn" id="warnStray">
+          ⚠️ Remove <strong>&#123;&#123;Industry&#125;&#125;</strong> or <strong>&#123;&#123;Location&#125;&#125;</strong> before approving — Make.com will NOT replace these and leads will see them literally.
+        </div>
+
+        <div class="tags-row">
+          <div class="mtag" onclick="insertTag('{{FirstName}}')">&#123;&#123;FirstName&#125;&#125;</div>
+          <div class="mtag" onclick="insertTag('{{Company}}')">&#123;&#123;Company&#125;&#125;</div>
+          <div class="mtag" onclick="insertTag('{{Title}}')">&#123;&#123;Title&#125;&#125;</div>
+        </div>
+        <div class="tag-hint">Click to insert at cursor · Make.com replaces with lead's real data</div>
+
+        <textarea class="tarea" id="tarea" oninput="onEdit()" placeholder="Fetching Claude-generated template…"></textarea>
+        <div class="wc" id="wc">0 words</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">👁️ Live Preview <span>— exactly what each lead receives</span></div>
+        <div class="prev-btns" id="prevBtns"></div>
+        <div class="prev-box"  id="prevBox">Select a lead above to preview.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="card" style="border-color:#22c55e33;">
+        <div class="card-title">✅ Approve &amp; Send</div>
+        <div class="info" style="border-color:#22c55e33;background:#0d1e0d;margin-bottom:14px;margin-top:0;">
+          Your template → Make.com personalises each email<br/>
+          <strong style="color:#e2eaf8;">&#123;&#123;FirstName&#125;&#125;</strong> → lead's first name<br/>
+          <strong style="color:#e2eaf8;">&#123;&#123;Company&#125;&#125;</strong> → their company<br/>
+          <strong style="color:#e2eaf8;">&#123;&#123;Title&#125;&#125;</strong> → their job title<br/>
+          <strong style="color:var(--green);" id="approveCount">—</strong> emails fire from
+          <strong style="color:var(--blue);"  id="approveFrom">—</strong> at 10:00 AM
+        </div>
+        <button class="approve-btn" id="approveBtn" onclick="approveBatch()">
+          <span id="approveBtnText">✅ Approve &amp; Send Emails</span>
+        </button>
+        <div class="approve-sub" id="approveSub">Loading…</div>
+        <button class="skip-btn" onclick="skipBatch()">⏭ Skip Today's Batch</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">👥 Today's Leads <span id="leadLabel">—</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Name</th><th>Company</th><th>Title</th></tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="4" style="color:var(--dim);padding:20px;text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="info">
+        <strong style="color:var(--amber);">⏱ Today's schedule</strong><br/>
+        7:00 AM · 25 leads pulled from Master sheet<br/>
+        ~8:00 AM · This review link sent to your inbox<br/>
+        <strong style="color:#fff;">Now · You approve or edit here</strong><br/>
+        10:00 AM · All emails fire from Make.com
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SUCCESS SCREEN -->
+<div class="wrap">
+  <div class="sscreen" id="screenSuccess">
+    <div class="success-body">
+      <div class="sicon" id="sIcon">🚀</div>
+      <h2 id="sTitle">Batch Approved!</h2>
+      <p id="sMsg">Make.com has your template. All <strong id="sCount">—</strong> emails will be personalised and sent from <strong id="sFrom">—</strong> at <strong>10:00 AM</strong>.</p>
+      <div class="s-stats">
+        <div><div class="sv" style="color:var(--green);" id="sLeads">—</div><div class="sl">EMAILS QUEUED</div></div>
+        <div><div class="sv" style="color:var(--blue);">10:00</div><div class="sl">SEND TIME</div></div>
+        <div><div class="sv" style="color:var(--purple);" id="sTags">3</div><div class="sl">MERGE TAGS</div></div>
+      </div>
+      <p style="margin-top:18px;font-size:11px;color:var(--dim);">You can close this tab. Make.com handles the rest.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ═══════════════════════════════════════════════════════════════════════════
+//  LEADFLOW — BATCH APPROVAL  v3.0  (Production-ready)
+//
+//  THREE CRITICAL FIXES APPLIED:
+//
+//  FIX 1 — CORS / URL-encoding:
+//    Previous version passed the full CSV URL as a param, causing URL-within-URL
+//    encoding failures. Now Make.com passes sheetId + leadsGid + templatesGid
+//    as separate params. This page constructs the CSV URL internally.
+//    No encoding issues. No URL length limit hit.
+//
+//  FIX 2 — Date format mismatch:
+//    Google Sheets exports dates in locale format (24/03/2025, March 24 2025, etc.)
+//    Previous comparison batch === sheetDate always returned zero matches.
+//    normaliseDate() converts any format to YYYY-MM-DD before comparing.
+//    Also handles Excel serial numbers.
+//
+//  FIX 3 — Template URL param too long:
+//    Claude-generated template (100 words + punctuation) URL-encodes to ~700 chars.
+//    With all other params this exceeds email client URL limits (~2000 chars).
+//    Template is now fetched from the Templates tab in Google Sheets by batch date.
+//    Not passed in URL at all.
+//
+//  MAKE.COM URL FORMAT:
+//    https://YOUR-USERNAME.github.io/approve.html
+//      ?webhook=https://hook.eu1.make.com/XXXX
+//      &batch=2025-03-24
+//      &from=amitg@futurismtech.com
+//      &sheetId=YOUR_SHEET_ID
+//      &leadsGid=LEADS_TAB_GID_NUMBER
+//      &templatesGid=TEMPLATES_TAB_GID_NUMBER
+//      &senderName=Amit+G
+//      &meetingLink=https%3A%2F%2Fcalendly.com%2Famitg%2F30min
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── URL params ────────────────────────────────────────────────────────────
+const P           = new URLSearchParams(window.location.search);
+const WEBHOOK     = P.get("webhook")      || "";
+const BATCH       = P.get("batch")        || new Date().toISOString().split("T")[0];
+const FROM        = P.get("from")         || "amitg@futurismtech.com";
+const SHEET_ID    = P.get("sheetId")      || "";
+const LEADS_GID   = P.get("leadsGid")     || "0";
+const TMPL_GID    = P.get("templatesGid") || "";
+const SENDER_NAME = P.get("senderName")   ? decodeURIComponent(P.get("senderName"))  : "Amit";
+const MTG_LINK    = P.get("meetingLink")  ? decodeURIComponent(P.get("meetingLink")) : "[MEETING_LINK]";
+
+// ── State ─────────────────────────────────────────────────────────────────
+let leads = [];
+let previewIdx = 0;
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FIX 2 — Date normaliser
+//  Converts ANY format Google Sheets might produce → YYYY-MM-DD
+// ═══════════════════════════════════════════════════════════════════════════
+function normaliseDate(raw) {
+  if (!raw) return "";
+  const s = String(raw).trim();
+
+  // Already ISO YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // Excel/Google Sheets serial number (days since 1899-12-30)
+  if (/^\d{5}$/.test(s)) {
+    const d = new Date((parseInt(s,10) - 25569) * 86400000);
+    return d.toISOString().split("T")[0];
+  }
+
+  // DD/MM/YYYY
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+
+  // DD-Mon-YYYY  e.g. 24-Mar-2025
+  m = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (m) { const mo=mon(m[2]); if(mo) return `${m[3]}-${mo}-${m[1].padStart(2,"0")}`; }
+
+  // Month DD, YYYY  e.g. March 24, 2025
+  m = s.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (m) { const mo=mon(m[1]); if(mo) return `${m[3]}-${mo}-${m[2].padStart(2,"0")}`; }
+
+  // DD Month YYYY  e.g. 24 March 2025
+  m = s.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+  if (m) { const mo=mon(m[2]); if(mo) return `${m[3]}-${mo}-${m[1].padStart(2,"0")}`; }
+
+  // JS Date fallback
+  const d = new Date(s);
+  if (!isNaN(d)) return d.toISOString().split("T")[0];
+  return s;
+}
+
+function mon(str) {
+  const m={jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
+           jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
+  return m[str.toLowerCase().slice(0,3)] || null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FIX 1 — CSV fetch with CORS + content-type guard
+//  sheetId and gid passed separately; URL built here, not in Make.com
+// ═══════════════════════════════════════════════════════════════════════════
+function buildCsvUrl(gid) {
+  // /export endpoint works when sheet is shared "Anyone with link → Viewer"
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}&cacheBust=${Date.now()}`;
+}
+
+async function fetchCsv(gid, label) {
+  if (!SHEET_ID) throw new Error("No sheetId URL param. See setup guide above.");
+
+  let res;
+  try {
+    res = await fetch(buildCsvUrl(gid), { cache: "no-store" });
+  } catch(e) {
+    throw new Error(
+      `Network error fetching ${label} tab. ` +
+      `Ensure the sheet is shared "Anyone with the link → Viewer". (${e.message})`
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(`Google Sheets returned HTTP ${res.status} for ${label} tab. Check sheet sharing and GID.`);
+  }
+
+  // FIX 4 — Detect HTML error pages returned as 200
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("text/html")) {
+    throw new Error(
+      `${label} tab returned HTML instead of CSV. ` +
+      `The sheet is not publicly shared or the GID (${gid}) is wrong. ` +
+      `Go to File → Share → Anyone with link → Viewer.`
+    );
+  }
+
+  const text = await res.text();
+  if (!text || text.trim().length < 5) {
+    throw new Error(`${label} tab returned empty content. Check the sheet has data and GID ${gid} is correct.`);
+  }
+  return text;
+}
+
+// ── CSV parser — handles quoted fields with commas and escaped quotes ─────
+function parseCsv(text) {
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if (lines.length < 2) return [];
+  const headers = splitLine(lines[0]).map(h=>h.replace(/^"|"$/g,"").trim());
+  return lines.slice(1).map(line => {
+    const vals = splitLine(line);
+    const obj  = {};
+    headers.forEach((h,i) => { obj[h] = (vals[i]||"").replace(/^"|"$/g,"").trim(); });
+    return obj;
+  });
+}
+
+function splitLine(line) {
+  const out=[]; let cur="", inQ=false;
+  for (let i=0; i<line.length; i++) {
+    const c=line[i];
+    if (c==='"') {
+      if (inQ && line[i+1]==='"') { cur+='"'; i++; }
+      else inQ=!inQ;
+    } else if (c===',' && !inQ) { out.push(cur); cur=""; }
+    else cur+=c;
+  }
+  out.push(cur);
+  return out;
+}
+
+// ── Map sheet row to lead object ──────────────────────────────────────────
+function toLeadObj(row) {
+  const g=(...keys)=>{
+    for (const k of keys) { const v=row[k]; if(v&&String(v).trim()) return String(v).trim(); }
+    return "";
+  };
+  const fullName=g("Name","name","Full Name");
+  return {
+    fullName,
+    firstName: fullName.split(" ")[0]||fullName,
+    email:     g("Email","email"),
+    company:   g("Company Name","Company","company"),
+    title:     g("Job Title","Title","title"),
+    // Silent context only — used by Claude API, never merged into email body
+    industry:  g("Industry","industry"),
+    location:  g("State/Province","Location","location"),
+    valueProp: g("Value Proposition Angle","Value Prop"),
+    hook:      g("Context Hook (Relate to Their Role)","Context Hook"),
+  };
+}
+
+// ── Fetch today's 25 leads from Leads tab ────────────────────────────────
+async function fetchLeads() {
+  const text = await fetchCsv(LEADS_GID, "Leads");
+  const rows = parseCsv(text);
+  if (!rows.length) throw new Error("Leads tab is empty. Scenario 1 may not have run yet today.");
+
+  // FIX 2 in action: normalise both sides before comparing
+  let today = rows.filter(r => normaliseDate(r["Batch Date"]||r["batch_date"]||"") === BATCH);
+
+  if (!today.length) {
+    // Fallback: awaiting_review status
+    today = rows.filter(r => (r["Status"]||r["status"]||"").toLowerCase().trim() === "awaiting_review");
+    if (!today.length) {
+      throw new Error(
+        `No leads found for batch date ${BATCH}. ` +
+        `No rows with Status = awaiting_review either. ` +
+        `Make sure Make.com writes Batch Date in YYYY-MM-DD format.`
+      );
+    }
+    console.warn(`Date filter missed — fell back to Status = awaiting_review (${today.length} rows)`);
+  }
+
+  return today.slice(0,25).map(toLeadObj);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FIX 3 — Fetch template from Templates tab, NOT from URL param
+// ═══════════════════════════════════════════════════════════════════════════
+async function fetchTemplate() {
+  if (!TMPL_GID) {
+    console.warn("No templatesGid param — using fallback template.");
+    return fallbackTemplate();
+  }
+  try {
+    const text = await fetchCsv(TMPL_GID, "Templates");
+    const rows = parseCsv(text);
+    // FIX 2 in action: normalise template tab dates too
+    const row  = rows.find(r => normaliseDate(r["Date"]||r["date"]||"") === BATCH);
+    if (row) {
+      const body = row["Template Body"]||row["template_body"]||"";
+      if (body.trim()) return body.trim();
+    }
+    console.warn(`No template row for ${BATCH} in Templates tab — using fallback.`);
+    return fallbackTemplate();
+  } catch(e) {
+    // Template failure is non-fatal — show fallback
+    console.warn("Template fetch failed:", e.message);
+    return fallbackTemplate();
+  }
+}
+
+// Fallback only uses the 3 confirmed merge tags
+// {{Industry}} and {{Location}} intentionally NOT included here
+function fallbackTemplate() {
+  return `Subject: Quick question, {{FirstName}}
+
+Hi {{FirstName}},
+
+I came across {{Company}} and wanted to reach out directly.
+
+We help companies like yours build a consistent pipeline of qualified leads through targeted digital marketing — without adding headcount.
+
+Would a quick 20-minute call make sense this week?
+
+Book here: ${MTG_LINK}
+
+Best,
+${SENDER_NAME}
+Futurism Technologies`;
+}
+
+// ── Show/hide screens ─────────────────────────────────────────────────────
+function show(id) {
+  ["screenLoading","screenError","screenSetup","screenMain","screenSuccess"]
+    .forEach(sid => {
+      const el=document.getElementById(sid);
+      if (!el) return;
+      if (sid==="screenMain"||sid==="screenSetup") el.style.display=sid===id?"block":"none";
+      else el.classList.toggle("show", sid===id);
+    });
+}
+
+function showErr(msg) {
+  document.getElementById("errMsg").textContent=msg;
+  show("screenError");
+  document.getElementById("pulseDot").className="pulse-dot err";
+  document.getElementById("hdrInfo").textContent="Error loading batch";
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", async () => {
+  if (!SHEET_ID) {
+    show("screenSetup");
+    document.getElementById("pulseDot").className="pulse-dot skip";
+    document.getElementById("hdrInfo").textContent="Setup required — see guide below";
+    return;
+  }
+  try {
+    // Parallel fetch — leads and template at the same time
+    const [fetchedLeads, fetchedTmpl] = await Promise.all([fetchLeads(), fetchTemplate()]);
+    if (!fetchedLeads.length) throw new Error("No leads returned for today's batch.");
+    leads = fetchedLeads;
+    initPage(fetchedTmpl);
+  } catch(e) {
+    showErr(e.message);
+  }
+});
+
+// ── Init main UI ──────────────────────────────────────────────────────────
+function initPage(tmpl) {
+  // Parse BATCH as noon UTC to avoid timezone off-by-one
+  const dateStr = new Date(BATCH+"T12:00:00Z").toLocaleDateString("en-GB",{
+    weekday:"long",day:"numeric",month:"short",year:"numeric"
+  });
+
+  document.getElementById("hdrInfo").textContent      = `${leads.length} leads · ${dateStr}`;
+  document.getElementById("pulseDot").className        = "pulse-dot";
+  document.getElementById("bannerTitle").textContent   = `Daily Batch — ${dateStr}`;
+  document.getElementById("bannerCount").textContent   = leads.length;
+  document.getElementById("approveCount").textContent  = leads.length;
+  document.getElementById("approveFrom").textContent   = FROM;
+  document.getElementById("approveBtnText").textContent= `✅ Approve & Send ${leads.length} Emails`;
+  document.getElementById("approveSub").innerHTML      = `Sends from ${esc(FROM)} · 10:00 AM today<br/>This cannot be undone`;
+  document.getElementById("sCount").textContent        = leads.length;
+  document.getElementById("sLeads").textContent        = leads.length;
+  document.getElementById("sFrom").textContent         = FROM;
+  document.getElementById("leadLabel").textContent     = `— ${leads.length} contacts`;
+
+  // Table
+  document.getElementById("tbody").innerHTML = leads.map((l,i)=>`
+    <tr>
+      <td style="color:var(--dim);font-weight:700;">${i+1}</td>
+      <td><div class="ln">${esc(l.fullName)}</div><div class="le">${esc(l.email)}</div></td>
+      <td style="color:var(--muted);">${esc(l.company)}</td>
+      <td style="color:var(--muted);">${esc(l.title)}</td>
+    </tr>`).join("");
+
+  // Preview buttons
+  const btns=document.getElementById("prevBtns"); btns.innerHTML="";
+  leads.slice(0,5).forEach((l,i)=>{
+    const b=document.createElement("button");
+    b.className="pbtn"+(i===0?" active":""); b.textContent=l.firstName;
+    b.onclick=()=>{
+      document.querySelectorAll(".pbtn").forEach(x=>x.classList.remove("active"));
+      b.classList.add("active"); previewIdx=i; updatePreview();
+    };
+    btns.appendChild(b);
+  });
+
+  document.getElementById("tarea").value=tmpl;
+  onEdit();
+  show("screenMain");
+}
+
+// ── Editor handlers ───────────────────────────────────────────────────────
+function onEdit() { updateWc(); checkStray(); updatePreview(); }
+
+function updateWc() {
+  const v=document.getElementById("tarea").value;
+  const w=v.trim().split(/\s+/).filter(Boolean).length;
+  const el=document.getElementById("wc");
+  el.textContent=`${w} words`;
+  el.style.color=w>150?"var(--red)":w>100?"var(--amber)":"var(--dim)";
+}
+
+function checkStray() {
+  const has=/\{\{Industry\}\}|\{\{Location\}\}/i.test(document.getElementById("tarea").value);
+  document.getElementById("warnStray").classList.toggle("show",has);
+}
+
+function insertTag(tag) {
+  const ta=document.getElementById("tarea");
+  const s=ta.selectionStart, e=ta.selectionEnd;
+  ta.value=ta.value.slice(0,s)+tag+ta.value.slice(e);
+  ta.selectionStart=ta.selectionEnd=s+tag.length;
+  ta.focus(); onEdit();
+}
+
+// Only replace the 3 confirmed merge tags in preview
+function updatePreview() {
+  if (!leads.length) return;
+  const l=leads[previewIdx]||leads[0];
+  const merged=document.getElementById("tarea").value
+    .replace(/\{\{FirstName\}\}/gi, l.firstName||l.fullName.split(" ")[0])
+    .replace(/\{\{Company\}\}/gi,   l.company)
+    .replace(/\{\{Title\}\}/gi,     l.title);
+  document.getElementById("prevBox").textContent=merged;
+}
+
+// ── Approve batch ─────────────────────────────────────────────────────────
+async function approveBatch() {
+  const btn=document.getElementById("approveBtn");
+  const txt=document.getElementById("approveBtnText");
+  const tmpl=document.getElementById("tarea").value.trim();
+
+  if (!tmpl) { alert("Template is empty. Please write or load a template before approving."); return; }
+
+  if (/\{\{Industry\}\}|\{\{Location\}\}/i.test(tmpl)) {
+    alert("⚠️ Your template contains {{Industry}} or {{Location}}.\n\nMake.com will NOT replace these — leads will see them literally.\n\nRemove these tags first.");
+    return;
+  }
+
+  const tagsUsed=["{{FirstName}}","{{Company}}","{{Title}}"].filter(t=>tmpl.toLowerCase().includes(t.toLowerCase()));
+
+  txt.textContent="⏳ Sending to Make.com…"; btn.classList.add("busy");
+
+  const payload={
+    type:         "batch_approved",
+    batchDate:    BATCH,
+    fromEmail:    FROM,
+    senderName:   SENDER_NAME,
+    meetingLink:  MTG_LINK,
+    templateBody: tmpl,
+    mergeTagsUsed:tagsUsed.join(", "),
+    leadsCount:   leads.length,
+    approvedAt:   new Date().toISOString(),
+    sendTime:     "10:00",
+    // Only the 3 merge fields — not silent context fields
+    leads: leads.map(l=>({firstName:l.firstName,fullName:l.fullName,email:l.email,company:l.company,title:l.title})),
+  };
+
+  try {
+    if (WEBHOOK) {
+      const r=await fetch(WEBHOOK,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      if (!r.ok) throw new Error(`Make.com returned HTTP ${r.status}. Check the webhook URL is active and not expired.`);
+    } else {
+      await new Promise(r=>setTimeout(r,1100));
+      console.log("Demo mode payload:", payload);
+    }
+
+    document.getElementById("sTags").textContent=tagsUsed.length;
+    show("screenSuccess");
+    document.getElementById("pulseDot").className="pulse-dot ok";
+    document.getElementById("hdrInfo").textContent=`✓ Approved · ${leads.length} emails queued`;
+    document.getElementById("tStep3").className="tstep done";
+    document.getElementById("tStep4").className="tstep active";
+
+  } catch(e) {
+    txt.textContent="❌ Error — tap to retry"; btn.classList.remove("busy");
+    alert("Could not reach Make.com:\n\n"+e.message);
+  }
+}
+
+// ── Skip batch ────────────────────────────────────────────────────────────
+function skipBatch() {
+  if (!confirm(`Skip today's batch of ${leads.length} leads?\n\nThey will NOT be emailed today. Make.com will be notified.`)) return;
+
+  const finish=()=>{
+    document.getElementById("pulseDot").className="pulse-dot skip";
+    document.getElementById("hdrInfo").textContent=`⏭ Batch skipped`;
+    document.getElementById("sIcon").textContent="⏭";
+    document.getElementById("sTitle").textContent="Batch Skipped";
+    document.getElementById("sTitle").style.color="var(--amber)";
+    document.getElementById("sMsg").textContent=`Today's ${leads.length} leads were not emailed.`;
+    document.getElementById("sLeads").textContent=0;
+    document.getElementById("sCount").textContent=0;
+    show("screenSuccess");
+  };
+
+  const skipPayload={type:"batch_skipped",batchDate:BATCH,leadsCount:leads.length,skippedAt:new Date().toISOString()};
+
+  if (WEBHOOK) {
+    fetch(WEBHOOK,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(skipPayload)})
+    .then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); finish(); })
+    .catch(e=>{ if(confirm(`Could not notify Make.com (${e.message}).\nProceed with skip anyway?`)) finish(); });
+  } else {
+    finish();
+  }
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────
+function esc(s){
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function copyUrl() {
+  const base=`${window.location.origin}${window.location.pathname}`;
+  const url=base+`?webhook=YOUR_MAKE_WEBHOOK_URL&batch=YYYY-MM-DD&from=amitg@futurismtech.com&sheetId=YOUR_SHEET_ID&leadsGid=LEADS_GID&templatesGid=TEMPLATES_GID&senderName=Amit+G&meetingLink=YOUR_CALENDLY_URL`;
+  navigator.clipboard?.writeText(url).then(()=>{
+    const b=document.querySelector(".copy-btn");
+    b.textContent="✅ Copied!";
+    setTimeout(()=>b.textContent="📋 Copy URL template",2000);
+  });
+}
+</script>
+</body>
+</html>
